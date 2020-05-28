@@ -17,17 +17,41 @@ exec csi -s "$0" "$@"
   (let* ((options
           (parse-command-line
            '(((-t --type) . type)
+             ((-m --mode) . mode)
+             ((-b --band) . band)
              ((-h --help)))))
          (filenames (alist-value options '-- '()))
-         (report-type (alist-value options '--type (alist-value options '-t ""))))
-    (cond ((or (assoc '-h options)
+         (report-type (alist-value options '--type (alist-value options '-t "")))
+         (mode (alist-value options '--mode (alist-value options '-m #f)))
+         (band (alist-value options '--band (alist-value options '-b #f))))
+    (cond ((or (null? filenames)
+               (assoc '-h options)
                (assoc '--help options))
-           (print "Usage: adi2csv [-t <type>] <file> [file...]")
+           (print "Usage: adi2csv [options] <file> [file...]")
+           (print "")
+           (print "Options:")
            (print "    -t | --type <type>    Set the report type. Values: [standard, jarl], Default: standard")
+           (print "    -m | --mode <mode>    Only show QSOs for the given mode.")
+           (print "    -b | --band <band>    Only show QSOs for the given band.")
            (print "    -h | --help           Show this help message."))
-          ((null? filenames)
-           (print "Please provide at least one ADI file name."))
           (else
-           (print-report (string-downcase report-type) (load-adi filenames))))))
+           (let* ((mode-filter
+                   (if mode
+                       (lambda (qso) (equal?
+                                      (string-upcase (alist-value qso 'mode ""))
+                                      (string-upcase mode)))
+                       (lambda (qso) #t)))
+                  (band-filter
+                   (if band
+                       (lambda (qso) (equal?
+                                      (string-upcase (alist-value qso 'band ""))
+                                      (string-upcase band)))
+                       (lambda (qso) #t)))
+                  (qso-filter
+                   (lambda (qso)
+                     (and (mode-filter qso)
+                          (band-filter qso)))))
+             (print-report (string-downcase report-type)
+                           (filter qso-filter (load-adi filenames))))))))
 
 (main)
