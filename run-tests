@@ -1,0 +1,7 @@
+#! /bin/sh
+#|
+exec csi -s "$0" "$@"
+|#
+
+(include "adif-test.scm")
+(adif-test)

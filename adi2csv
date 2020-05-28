@@ -1,0 +1,33 @@
+#! /bin/sh
+#|
+exec csi -s "$0" "$@"
+|#
+
+(import scheme)
+(import (srfi 1))
+(import (srfi 13))
+
+(include "util.scm")
+(include "adif.scm")
+(include "report.scm")
+
+(import (optimism))
+
+(define (main)
+  (let* ((options
+          (parse-command-line
+           '(((-t --type) . type)
+             ((-h --help)))))
+         (filenames (alist-value options '-- '()))
+         (report-type (alist-value options '--type (alist-value options '-t ""))))
+    (cond ((or (assoc '-h options)
+               (assoc '--help options))
+           (print "Usage: adi2csv [-t <type>] <file> [file...]")
+           (print "    -t | --type <type>    Set the report type. Values: [standard, jarl], Default: standard")
+           (print "    -h | --help           Show this help message."))
+          ((null? filenames)
+           (print "Please provide at least one ADI file name."))
+          (else
+           (print-report (string-downcase report-type) (load-adi filenames))))))
+
+(main)
