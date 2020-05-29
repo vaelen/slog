@@ -44,9 +44,7 @@
             (qso_date . "Date")
             (band . "Band")
             (mode . "Mode")
-            (gridsquare . "Grid")
-            (rst_sent . "Sent")
-            (rst_rcvd . "Rcvd")))
+            (gridsquare . "Grid")))
         (else
          '((qso_date . "Date")
            (time_on . "Time")
@@ -80,9 +78,12 @@
 
   ;; Get a list of values for a given list of QSO field names
   (define (get-fields qso field-names)
+    (define (get-field qso field-names)
+      (list (string-upcase (alist-value qso (car field-names) ""))))
+    
     (if (null? (cdr field-names))
-        (list (alist-value qso (car field-names) ""))
-        (append (list (alist-value qso (car field-names) ""))
+        (get-field qso field-names)
+        (append (get-field qso field-names)
                 (get-fields qso (cdr field-names)))))
 
   ;; Convert QSO list to record list
