@@ -29,12 +29,16 @@
 (import scheme)
 (import (srfi 1))
 (import (srfi 13))
+(import (srfi 14))
+(import (srfi 19))
 
 (include "util.scm")
 
 ;; Needed for with-input-from-string
 (import (chicken port))
 
+(include "adif-data-types.scm")
+    
 ;; Parse an ADI file and return a list of QSO records
 (define (read-adi)
   ;; Reads a single line comment from the default port.
@@ -121,7 +125,9 @@
            (field-value (read-adi-field-value field-length)))
       ;; TODO: Handle field types
       (if field-name
-          (cons field-name field-value)
+          (cons field-name (adif->native
+                            (alist-value adif-data-types field-name #f)
+                            field-value))
           #f)))
 
   ;; Read an ADI section and return a list of fields.
@@ -158,17 +164,16 @@
 ;; Write an ADI file to the default output port
 (define (write-adi qsos)
   ;; Write a single field
-  (define (write-field name value)
-    (cond ((symbol? name) (write-field (symbol->string name) value))
-          ((null? value) (write-field name ""))
-          ((symbol? value) (write-field na,e (symbol->string value)))
-          ((number? value) (write-field name (number->string value)))
-          (value
-           (display (string-append "<" name ":"
-                                   (number->string (string-length value))
-                                   ">" value "\n")))
-          (else
-           (display (string-append "<" name ">\n")))))
+  (define (write-field field-name field-value)
+    (let ((name (if (symbol? field-name)
+                    (symbol->string field-name)
+                    field-name))
+          (value (native->adif field-name field-value)))
+          (if field-value
+              (display (string-append "<" name ":"
+                                      (number->string (string-length value))
+                                      ">" value "\n"))
+              (display (string-append "<" name ">\n")))))
 
   ;; Write a list of fields
   (define (write-fields fields)
@@ -204,11 +209,25 @@
 (define (save-adi filename adif)
   (with-output-to-file filename (lambda () (write-adi adif))))
 
+;; Returns the start date and time of a QSO
+(define (qso-start qso)
+  (combine-date-time (alist-value qso 'qso_date #f)
+                     (alist-value qso 'time_on #f)))
+
+;; Returns the end date and time of a QSO
+(define (qso-end qso)
+  (combine-date-time (alist-value qso 'qso_date_off #f)
+                     (alist-value qso 'time_off #f)))
+
 ;; Returns true if the first QSO has an earlier QSO date than the second QSO
 (define (qso-date-time< qso-a qso-b)
-  (define (date-time-string qso)
-    (string-append (alist-value qso 'qso_date "00000000") (alist-value qso 'time_on "")))
-  (string< (date-time-string qso-a) (date-time-string qso-b)))
+  (let ((date-a (qso-start qso-a))
+        (date-b (qso-start qso-b)))
+    (cond ((and date-a date-b)
+           (time<? (date->time-utc date-a)
+                   (date->time-utc date-b)))
+          ((date-a) #f)
+          (else #t))))
 
 ;; Generate a less function for QSO callsigns that in turn uses the given less function
 (define (qso-callsign-less less)
@@ -236,3 +255,38 @@
 (define (eqsl-sent qsos)
   (filter eql-sent qsos))
 
+;; Take a string and a type and return a native value
+;; Valid types: date, time, list, boolean, number
+(define (adif->native type value-string)
+  (cond ((eq? type 'date)
+         (if (>= (string-length value-string) 8)
+             (date->utc (string->date value-string "~Y~m~d"))
+             #f))
+        ((eq? type 'time)
+         (if (>= (string-length value-string) 4)
+             (date->utc (string->date
+                         (string-pad-right value-string 6 #\0)
+                         "~H~M~S"))
+             #f))
+        ((eq? type 'list)
+         (string-tokenize value-string (string->char-set ",")))
+        ((eq? type 'boolean) ((or (equal? value-string "y")
+                                  (equal? value-string "Y"))))
+        ((eq? type 'number) (string->number value-string))
+        (else value-string)))
+
+;; Take a value and a type and return an ADIF string
+;; Valid types: date, time, list, boolean, number
+(define (native->adif type value)
+  (cond ((eq? type 'boolean) (if value "Y" "N"))
+        ((and (eq? type 'date) (date? value))
+         (date->string value "~Y~m~d"))
+        ((and (eq? type 'time) (date? value))
+         (date->string value "~Y~m~d"))
+        ((list? value) (string-join value ","))
+        ((symbol? value) (symbol->string value))
+        ((number? value) (number->string value))
+        ((null? value) "")
+        ((eq? value #f) "")
+        (else value)))
+  

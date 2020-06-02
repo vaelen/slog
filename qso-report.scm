@@ -124,7 +124,7 @@ exec csi -s "$0" "$@"
                                        (generate-dedup-filter seen-callsigns '(call)))
                                       (dedup-by-band
                                        (generate-dedup-filter seen-callsigns '(call mode)))
-                                      (else #t)))
+                                      (else (lambda (qso) #t))))
                   (qso-filter
                    (lambda (qso)
                      (and (mode-filter qso)

@@ -35,6 +35,32 @@
 
 
 ;; Get one the value of a key in an alist
-(define (alist-value qso name default-value)
-  (let ((value (assoc name qso)))
+(define (alist-value alist name default-value)
+  (let ((value (assoc name alist)))
     (if value (cdr value) default-value)))
+
+;; Change the zone-offset of a date to 0 without changing the time.
+(define (date->utc date)
+  (make-date (date-nanosecond date)
+             (date-second date)
+             (date-minute date)
+             (date-hour date)
+             (date-day date)
+             (date-month date)
+             (date-year date)
+             0))
+
+;; Combine a date and time field into a single date object
+(define (combine-date-time date time)
+  (cond ((and date time)
+         (make-date (date-nanosecond time)
+                    (date-second time)
+                    (date-minute time)
+                    (date-hour time)
+                    (date-day date)
+                    (date-month date)
+                    (date-year date)
+                    (date-zone-offset time)))
+        (date date)
+        (time time)
+        (else #f)))

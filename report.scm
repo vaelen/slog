@@ -32,6 +32,7 @@
 
 (import (srfi 1))
 (import (srfi 13))
+(import (srfi 19))
 
 (include "util.scm")
 (include "adif.scm")
@@ -76,10 +77,27 @@
 ;; Print a report
 (define (print-report report-type qsos)
 
+  ;; Format a value for printing
+  (define (format-value name value)
+    (let ((type (alist-value adif-data-types name #f)))
+      (cond ((symbol? value) (symbol->string value))
+            ((number? value) (number->string value))
+            ((and (date? value) (eq? type 'date))
+             (date->string value "~Y/~m/~d"))
+            ((and (date? value) (eq? type 'time))
+             (date->string value "~H:~M:~S"))
+            ((date? value)
+             (date->string value "~Y/~m/~d ~H:~M:~S"))
+            ((null? value) "")
+            ((list? value) (string-join value ","))
+            ((eq? type 'boolean?) (if value "Y" "N"))
+            (else value))))
+
   ;; Get a list of values for a given list of QSO field names
   (define (get-fields qso field-names)
     (define (get-field qso field-names)
-      (list (string-upcase (alist-value qso (car field-names) ""))))
+      (list (string-upcase
+             (format-value (car field-names) (alist-value qso (car field-names) "")))))
     
     (if (null? (cdr field-names))
         (get-field qso field-names)
@@ -101,7 +119,6 @@
 
   (define (print-header header)
     (print (string-join header "\t")))
-
   
   (let* ((header (map cdr (report-fields report-type)))
          (field-names (map car (report-fields report-type)))
