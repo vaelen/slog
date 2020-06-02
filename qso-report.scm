@@ -61,6 +61,7 @@ exec csi -s "$0" "$@"
   (print "    -c | --callsign <callsign>  Only show QSOs for the given callsign.")
   (print "    -d | --dedup                Remove duplicate callsigns.")
   (print "    -D | --dedup-by-band        Remove duplicate callsigns in each band.")
+  (print "    -S | --swl                  Include SWLs (excluded by default).")
   (print "    -h | --help                 Show this help message.")
   (print "    -v | --version              Show version and license information."))
 
@@ -78,6 +79,7 @@ exec csi -s "$0" "$@"
      ((-c --callsign) . callsign)
      ((-d --dedup))
      ((-D --dedup-by-band))
+     ((-S --swl))
      ((-h --help))
      ((-v --version)))))
 
@@ -89,7 +91,8 @@ exec csi -s "$0" "$@"
          (callsign (alist-value options '--callsign (alist-value options '-c #f)))
          (band (alist-value options '--band (alist-value options '-b #f)))
          (dedup (alist-value options '--dedup (alist-value options '-d #f)))
-         (dedup-by-band (alist-value options '--dedup-by-band (alist-value options '-D #f))))
+         (dedup-by-band (alist-value options '--dedup-by-band (alist-value options '-D #f)))
+         (swl (alist-value options '--swl (alist-value options '-S #f))))
     (cond ((or (assoc '-v options) (assoc '--version options))
            (print-version-info))
           ((or (assoc '-l options) (assoc '--list-types options))
@@ -98,13 +101,27 @@ exec csi -s "$0" "$@"
            (print-usage))
           (else
            (let* ((generate-filter
-                   (lambda (field-name value)
-                     (if value
-                         (let ((upcase-value (string-upcase value)))
-                           (lambda (qso) (equal?
-                                          (string-upcase (alist-value qso field-name ""))
-                                          upcase-value)))
-                         (lambda (qso) #t))))
+                     (lambda (field-name value)
+                       (let ((type (alist-value adif-data-types field-name 'string)))
+                         (cond ((and value (eq? type 'number))
+                                (let ((number-value (string->number value)))
+                                  (lambda (qso) (eq? (alist-value qso field-name 0)
+                                                     number-value))))
+                               ((eq? type 'boolean)
+                                (let ((boolean-value (if (string? value)
+                                                         (or (equal? value "Y")
+                                                             (equal? value "y"))
+                                                         value)))
+                                  (lambda (qso) (if boolean-value
+                                                    (alist-value qso field-name #f)
+                                                    (not (alist-value qso field-name #f))))))
+                               (value
+                                (let ((upcase-value (string-upcase value)))
+                                  (lambda (qso) (equal?
+                                                 (string-upcase (alist-value qso field-name ""))
+                                                 upcase-value))))
+                               (else 
+                                (lambda (qso) #t))))))
                   (generate-dedup-filter
                    (lambda (seen-values fields)
                      (lambda (qso)
@@ -125,9 +142,13 @@ exec csi -s "$0" "$@"
                                       (dedup-by-band
                                        (generate-dedup-filter seen-callsigns '(call mode)))
                                       (else (lambda (qso) #t))))
+                  (swl-filter (if swl
+                                  (lambda (qso) #t)
+                                  (generate-filter 'swl #f)))
                   (qso-filter
                    (lambda (qso)
-                     (and (mode-filter qso)
+                     (and (swl-filter qso)
+                          (mode-filter qso)
                           (band-filter qso)
                           (callsign-filter qso)
                           (dedup-filter qso))))
